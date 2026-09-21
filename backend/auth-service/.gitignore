@@ -1,0 +1,28 @@
+HELP.md
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### Environment Variables & Secrets ###
+.env
+*.env
+*.key
+*.pem
+
+### Logs ###
+*.log
+
+### IDE Configs ###
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+.settings/
+.classpath
+.project
+
+### OS Files ###
+.DS_Store
+Thumbs.db
