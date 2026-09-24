@@ -1,0 +1,28 @@
+# ===== Build artifacts =====
+target/
+
+# ===== Maven wrapper (kayt3awd yjib mn image) =====
+.mvn/
+
+# ===== Git =====
+.git/
+.gitignore
+.gitattributes
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
+
+# ===== Docs =====
+*.md
+HELP.md
+
+# ===== Docker =====
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# ===== OS =====
+.DS_Store
+Thumbs.db

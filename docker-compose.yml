@@ -1,0 +1,220 @@
+# ═══════════════════════════════════════════════════════════
+# Docker Compose - SecureVault Password Manager
+# Orchestration locale : 2 DB + 4 microservices + 1 frontend
+# ═══════════════════════════════════════════════════════════
+
+
+
+# ═══════════════════════════════════════
+# RÉSEAU
+# ═══════════════════════════════════════
+# Kaydir réseau bridge interne.
+# 3lach: services kythadtho b smiythom (DNS interne), machi IPs.
+# Matalan: auth-service kaydir connect l "postgres-auth:5432".
+networks:
+  securevault-net:
+    driver: bridge
+
+# ═══════════════════════════════════════
+# VOLUMES (persistance DB)
+# ═══════════════════════════════════════
+# Kaydir volumes nommés bach data PostgreSQL tb9a
+# mnin t m7i conteneurs (docker compose down).
+# Ila ma kanch volume, kol down = data m7iya.
+volumes:
+  postgres_auth_data:
+  postgres_vault_data:
+
+# ═══════════════════════════════════════
+# SERVICES
+# ═══════════════════════════════════════
+services:
+
+  # ═══════════════════════════════════════
+  # 1. PostgreSQL - Auth Service
+  # ═══════════════════════════════════════
+  postgres-auth:
+    # Image officielle PostgreSQL 15 + Alpine (sghira)
+    image: postgres:15-alpine
+    
+    # Smiya dyal conteneur (facile bach tchoufo f docker ps)
+    container_name: postgres-auth
+    
+    # Variables d'environnement (init DB)
+    # 3lach: PostgreSQL image kayt3refhom automatiquement
+    environment:
+      POSTGRES_DB: securevault_auth
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    
+    # Port exposed 3la hôte (5432)
+    # Format: "HOTE:CONTENEUR"
+    ports:
+      - "5432:5432"
+    
+    # Volume l data (persistance)
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+    
+    # Réseau
+    networks:
+      - securevault-net
+    
+    # Healthcheck: Docker kayt2akkad DB wjda
+    # pg_isready = commande PostgreSQL officielle
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d securevault_auth"]
+      interval: 10s      # Kaychecki kol 10s
+      timeout: 5s        # Timeout 5s
+      retries: 5         # 5 essais 9bel fail
+      start_period: 10s  # 10s bach ybda
+
+  # ═══════════════════════════════════════
+  # 2. PostgreSQL - Vault Service
+  # ═══════════════════════════════════════
+  postgres-vault:
+    image: postgres:15-alpine
+    container_name: postgres-vault
+    environment:
+      POSTGRES_DB: securevault_vault
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      # Port 5433 3la hôte (bach ma ykounch conflit m3a postgres-auth)
+      - "5433:5432"
+    volumes:
+      - postgres_vault_data:/var/lib/postgresql/data
+    networks:
+      - securevault-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d securevault_vault"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ═══════════════════════════════════════
+  # 3. Discovery Service (Eureka Server)
+  # ═══════════════════════════════════════
+  discovery-service:
+    # Build mn Dockerfile f backend/discovery-service
+    build:
+      context: ./backend/discovery-service
+      dockerfile: Dockerfile
+    container_name: discovery-service
+    ports:
+      - "8761:8761"
+    environment:
+      # Eureka server: ma kayregistriwch rasso
+      - EUREKA_CLIENT_REGISTER_WITH_EUREKA=false
+      - EUREKA_CLIENT_FETCH_REGISTRY=false
+    networks:
+      - securevault-net
+    healthcheck:
+      # wget --spider: ghir ychecki ila URL kayn
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8761/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s  # Spring Boot kaykhod ~30s
+
+  # ═══════════════════════════════════════
+  # 4. Auth Service
+  # ═══════════════════════════════════════
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      # ═══ Database (Spring Boot) ═══
+      # 3lach postgres-auth machi localhost: DNS interne dyal Docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-auth:5432/securevault_auth
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgrespassword
+      
+      # ═══ Eureka ═══
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      
+      # ═══ Profil Spring ═══
+      - SPRING_PROFILES_ACTIVE=prod
+      
+      # ═══ Secrets ═══
+      # ⚠️ F prod: K8s Secrets wla HashiCorp Vault
+      - JWT_SECRET=SecretKeyVaultSecure2026DevOpsProjectKeyForJWTSigning
+    depends_on:
+      # ⚠️ condition: service_healthy
+      # 3lach: depends_on bo7do ma kaykfich
+      # Khass service ykoun HEALTHY machi ghir "started"
+      postgres-auth:
+        condition: service_healthy
+      discovery-service:
+        condition: service_healthy
+    networks:
+      - securevault-net
+
+  # ═══════════════════════════════════════
+  # 5. Vault Service
+  # ═══════════════════════════════════════
+  vault-service:
+    build:
+      context: ./backend/vault-service
+      dockerfile: Dockerfile
+    container_name: vault-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-vault:5432/securevault_vault
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgrespassword
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - SPRING_PROFILES_ACTIVE=prod
+      - JWT_SECRET=SecretKeyVaultSecure2026DevOpsProjectKeyForJWTSigning
+      - VAULT_AES_SECRET=ChangeMeAESSecretKeyForVaultEncryption2026
+    depends_on:
+      postgres-vault:
+        condition: service_healthy
+      discovery-service:
+        condition: service_healthy
+    networks:
+      - securevault-net
+
+  # ═══════════════════════════════════════
+  # 6. Gateway Service (Spring Cloud Gateway)
+  # ═══════════════════════════════════════
+  gateway-service:
+    build:
+      context: ./backend/gateway-service
+      dockerfile: Dockerfile
+    container_name: gateway-service
+    ports:
+      - "8080:8080"
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - SPRING_PROFILES_ACTIVE=prod
+      - JWT_SECRET=SecretKeyVaultSecure2026DevOpsProjectKeyForJWTSigning
+    depends_on:
+      # Gateway khasso Eureka bach ydir load balancing
+      discovery-service:
+        condition: service_healthy
+    networks:
+      - securevault-net
+
+  # ═══════════════════════════════════════
+  # 7. Frontend (React + Nginx)
+  # ═══════════════════════════════════════
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "3100:80"
+    depends_on:
+      # Frontend kayt7taj gateway (API)
+      # Ma 3ndnach healthcheck 3la gateway (bash ykhdem b 3adi)
+      - gateway-service
+    networks:
+      - securevault-net

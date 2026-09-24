@@ -19,3 +19,12 @@ spring:
               - Authorization
             allowCredentials: false
             maxAge: 3600
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always
