@@ -67,8 +67,12 @@
     <artifactId>googleauth</artifactId>
     <version>1.5.0</version>
 </dependency>
-
-
+		<!-- H2 in-memory database pour les tests -->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>test</scope>
+		</dependency>
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
@@ -115,6 +119,7 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            
         </dependencies>
     </dependencyManagement>
 

@@ -17,6 +17,7 @@ import com.securevault.vault.service.VaultService;
 
 @WebMvcTest(VaultController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@org.springframework.test.context.ActiveProfiles("test")
 class VaultControllerTest {
 
     @Autowired
